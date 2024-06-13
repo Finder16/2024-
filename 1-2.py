@@ -1,15 +1,10 @@
-import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM, GRU, Dropout, Bidirectional
+from tensorflow.keras.layers import Dense, LSTM, GRU, Dropout
 from sklearn.model_selection import train_test_split
 from keras_tuner.tuners import RandomSearch
 import matplotlib.pyplot as plt
-
-# TensorFlow 환경 변수 설정
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # 0 = 모든 메시지, 1 = 정보, 2 = 경고, 3 = 오류만
 
 def lfsr(seed, taps, length):
     state = seed
@@ -25,6 +20,12 @@ def lfsr(seed, taps, length):
 
     return stream
 
+def find_period(stream):
+    for i in range(1, len(stream)//2 + 1):
+        if stream[:i] == stream[i:2*i]:
+            return i
+    return len(stream)
+
 def generate_lfsr_data(num_samples, lfsr_length):
     X = []
     y = []
@@ -37,12 +38,6 @@ def generate_lfsr_data(num_samples, lfsr_length):
         y.append(period)
     return np.array(X), np.array(y)
 
-def find_period(stream):
-    for i in range(1, len(stream)//2 + 1):
-        if stream[:i] == stream[i:2*i]:
-            return i
-    return len(stream)
-
 num_samples = 5000  # 데이터를 더 많이 생성
 lfsr_length = 16  # 적절한 값으로 조정
 X, y = generate_lfsr_data(num_samples, lfsr_length)
@@ -54,13 +49,12 @@ X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_st
 
 def build_model(hp):
     model = Sequential()
-    model.add(Bidirectional(LSTM(units=hp.Int('units_1', min_value=32, max_value=256, step=32),
-                                 activation='relu', input_shape=(lfsr_length, 1), return_sequences=True)))
+    model.add(LSTM(units=hp.Int('units_1', min_value=32, max_value=256, step=32),
+                   activation='relu', input_shape=(lfsr_length, 1), return_sequences=True))
     model.add(Dropout(rate=hp.Float('dropout_1', min_value=0.1, max_value=0.5, step=0.1)))
-    model.add(Bidirectional(GRU(units=hp.Int('units_2', min_value=32, max_value=256, step=32), activation='relu')))
+    model.add(GRU(units=hp.Int('units_2', min_value=32, max_value=256, step=32), activation='relu'))
     model.add(Dropout(rate=hp.Float('dropout_2', min_value=0.1, max_value=0.5, step=0.1)))
-    model.add(Dense(units=hp.Int('units_3', min_value=32, max_value=256, step=32), activation='relu', 
-                    kernel_regularizer=tf.keras.regularizers.l2(hp.Float('l2', min_value=1e-4, max_value=1e-2, sampling='LOG'))))
+    model.add(Dense(units=hp.Int('units_3', min_value=32, max_value=256, step=32), activation='relu'))
     model.add(Dense(1, activation='linear'))
 
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])),
@@ -89,18 +83,14 @@ def predict_period(stream):
     return model.predict(stream)[0][0]
 
 # 임의의 초기값 (128-bit)
-seed = 0xDEADBEEFCAFEBABE  # 128-bit 초기값
-# feedback polynomial (0, 1, 2, 7, 128)
-taps = [0, 1, 2, 7, 128]
-# 스트림 길이
-length = 100
+seed = 0xDEADBEEFCAFEBABE
+taps = [0, 1, 2, 7, 15]  # 최대 lfsr_length - 1 로 설정
+length = 16  # lfsr_length와 동일하게 설정
 
 # 스트림 생성
-stream = lfsr(seed, taps, length)
-print("Generated stream:", stream)
-
-# 예측
-predicted_period = predict_period(stream[:lfsr_length])
+test_stream = lfsr(seed, taps, length)
+predicted_period = predict_period(test_stream)
+print("Generated stream:", test_stream)
 print(f"Predicted Period: {predicted_period}")
 
 # 학습 및 검증 손실 그래프 그리기
