@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
@@ -5,6 +6,10 @@ from tensorflow.keras.layers import Dense, LSTM, GRU, Dropout, Bidirectional
 from sklearn.model_selection import train_test_split
 from keras_tuner.tuners import RandomSearch
 import matplotlib.pyplot as plt
+
+# TensorFlow 환경 변수 설정
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # 0 = 모든 메시지, 1 = 정보, 2 = 경고, 3 = 오류만
 
 def lfsr(seed, taps, length):
     state = seed
@@ -84,14 +89,18 @@ def predict_period(stream):
     return model.predict(stream)[0][0]
 
 # 임의의 초기값 (128-bit)
-seed = 0xDEADBEEFCAFEBABE
-taps = [0, 1, 2, 7, 15]  # 최대 lfsr_length - 1 로 설정
-length = 16  # lfsr_length와 동일하게 설정
+seed = 0xDEADBEEFCAFEBABE  # 128-bit 초기값
+# feedback polynomial (0, 1, 2, 7, 128)
+taps = [0, 1, 2, 7, 128]
+# 스트림 길이
+length = 100
 
 # 스트림 생성
-test_stream = lfsr(seed, taps, length)
-predicted_period = predict_period(test_stream)
-print("Generated stream:", test_stream)
+stream = lfsr(seed, taps, length)
+print("Generated stream:", stream)
+
+# 예측
+predicted_period = predict_period(stream[:lfsr_length])
 print(f"Predicted Period: {predicted_period}")
 
 # 학습 및 검증 손실 그래프 그리기
